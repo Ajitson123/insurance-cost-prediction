@@ -3,62 +3,60 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.model_selection import train_test_split
-from sklearn.linear_model import LinearRegression
-from sklearn.linear_model import Ridge, Lasso
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-v = pd.read_csv("insurance.csv")
-v['sex'] = v['sex'].map({'male':1, 'female':0})
-v['smoker'] = v['smoker'].map({'yes':1, 'no':0})
-v = pd.get_dummies(v, columns=['region'], drop_first=True)
-x = v.drop('charges', axis=1)
-y = v['charges']
+from sklearn.metrics import accuracy_score, classification_report, roc_auc_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.svm import SVC
+from xgboost import XGBClassifier
+from sklearn.metrics import classification_report, roc_auc_score
+v = pd.read_csv("HeartDiseaseTrain-Test.csv")
+print(v['target'].value_counts())
+print(v.describe())
+sns.countplot(x='target', data= v)
+plt.title('Heart Disease Distribution')
+sns.heatmap(v.select_dtypes(include='number').corr(), annot=True, cmap='coolwarm', fmt='.2f')
+cat_cols = v.select_dtypes(include='object').columns
+v = pd.get_dummies(v, columns=cat_cols, drop_first=True)
+print(v.shape)
+#split 
+x = v.drop('target', axis =1)
+y = v['target']
 x_train , x_test, y_train, y_test = train_test_split(x, y, test_size=0.2, random_state=42)
 sc = StandardScaler()
 x_train = sc.fit_transform(x_train)
 x_test = sc.transform(x_test)
-print("ready:", x_train.shape)
+print(x_train.shape)
 models = {
-    'linear regression': LinearRegression(),
-    'Ridge': Ridge(alpha=1.0),
-    'Lasso' : Lasso(alpha=1.0),
-    'Random forest' : RandomForestRegressor(n_estimators=100, random_state=42),
-    'gradient boosting': GradientBoostingRegressor(n_estimators=100, random_state=42)
+    'logistic regression' :LogisticRegression(),
+    'knn' : KNeighborsClassifier(),
+    'decision tree': DecisionTreeClassifier(),
+    'random forest': RandomForestClassifier(),
+    'adaboost': AdaBoostClassifier(),
+    'gradient boosting':GradientBoostingClassifier(),
+    'svm': SVC(),
+    'xgboost': XGBClassifier(evel_metric='logloss')
+
 }
-results = []
+result = []
 for name, model in models.items():
     model.fit(x_train, y_train)
     y_pred = model.predict(x_test)
-    mse = mean_squared_error(y_test, y_pred)
-    rmse = np.sqrt(mse)
-    mae = mean_absolute_error(y_test, y_pred)
-    r2 = r2_score(y_test, y_pred)
-    results.append({''
-        'Model': name,
-        'MSE': mse,
-        'RMSE': rmse,
-        'MAE': mae,
-        'R2 Score': r2
-    })
-    print(f"{name} - MSE: {mse:.2f}, RMSE: {rmse:.2f}, MAE: {mae:.2f}, R2 Score: {r2:.2f}")
-results_df = pd.DataFrame(results)
-print(results_df)
-best_model = GradientBoostingRegressor(n_estimators=100, random_state=42)
-best_model.fit(x_train, y_train)
-feature_nammes = v.drop('charges', axis=1).columns
-feature_importances = best_model.feature_importances_
-plt.figure(figsize=(10, 6))
-sns.barplot(x=feature_importances, y=feature_nammes)
-plt.title("Feature Importances")
-plt.xlabel("Importance")
-plt.ylabel("Features")
+    acc = accuracy_score(y_test, y_pred)
+    result.append({'model': name, 'accuracy':round(acc*100, 2)})
+    print(f"{name}: {acc*100:.2f}")
+print(pd.DataFrame(result).sort_values('accuracy', ascending=False))
+best = RandomForestClassifier(n_estimators=100, random_state=42)
+best.fit(x_train, y_train)
+y_pred = best.predict(x_test)
+print(classification_report(y_pred, y_test))
+print('roc auc:', roc_auc_score(y_test, y_pred))
+feat_imp = pd.Series(best.feature_importances_, index=v.drop('target', axis=1).columns)
+feat_imp.sort_values().plot(kind='barh', figsize=(8, 10))
+plt.title('feature importance- Heart Disease')
 plt.show()
 import joblib
-joblib.dump(best_model, 'insurance_cost_model.pkl')
-joblib.dump(sc, 'scaler.pkl')
-print("model saved")
-sample = sc.transform([[35, 1, 28.5, 2, 1, 0, 0, 1]])
-predicted = best_model.predict(sample)
-print(f"predicted insurance cost: {predicted[0]:,.2f}") 
-
+joblib.dump(best, 'heart_disease_model.pkl')
+print('model saved')
